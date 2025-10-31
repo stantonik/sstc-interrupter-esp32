@@ -1,0 +1,8 @@
+build/
+*cache*
+managed_components
+sdkconfig.old
+sstc_interrupter-esp32.eez-project-ui-state
+sstc-interrupter-backups
+.DS_Store
+fp-info-cache

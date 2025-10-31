@@ -1,0 +1,93 @@
+menu "SSTC Interrupter configuration"
+
+    menu "Safety Constraints"
+        config INTERRUPTER_TON_MAX
+            int "Maximum pulse duration allowed (us)"
+            default 100
+            range 1 500
+        config INTERRUPTER_TON_MIN
+            int "Minimum pulse duration required (us)"
+            default 10
+            range 1 500
+        config INTERRUPTER_TOFF_MIN
+            int "Minimum delay required between two pulses (us)"
+            default 300
+            range 1 1000
+    endmenu
+
+    menu "Knobs"
+        menu "Pulse Duration"
+            config INTERRUPTER_PD_DEFAULT
+                int "Default (us)"
+                default 10
+                range 1 500
+            config INTERRUPTER_PD_STEP
+                int "Increment step (us)"
+                default 5
+                range 1 100
+        endmenu
+        menu "Pulse Repetition Frequency"
+            config INTERRUPTER_PRF_MIN
+                int "Minimum (Hz)"
+                default 0
+                range 0 20000
+            config INTERRUPTER_PRF_DEFAULT
+                int "Default (Hz)"
+                default 440
+                range 0 20000
+            config INTERRUPTER_PRF_MAX
+                int "Maximum (Hz)"
+                default 20000
+                range 0 20000
+            config INTERRUPTER_PRF_STEP
+                int "Increment step"
+                default 5
+                range 1 10
+        endmenu
+        menu "Power"
+            config INTERRUPTER_POWER_STEP
+                int "Increment step"
+                default 5
+                range 1 10
+        endmenu
+        menu "Gain"
+            config INTERRUPTER_GAIN_STEP
+                int "Increment step (1/10dB)"
+                default 5
+                range 1 10
+        endmenu
+    endmenu
+
+    menu "Hardware"
+        menu "Pinout"
+            config INTERRUPTER_PIN_JACK
+                int "Audio jack input pin"
+                default 1
+            config INTERRUPTER_PIN_JACK_SW
+                int "Audio jack switch pin"
+                default 14
+            config INTERRUPTER_PIN_TRIGGER
+                int "Trigger button pin"
+                default 13
+            config INTERRUPTER_PIN_RE_A
+                int "Rotary encoder A pin"
+                default 15
+            config INTERRUPTER_PIN_RE_B
+                int "Rotary encoder B pin"
+                default 16
+            config INTERRUPTER_PIN_RE_SW
+                int "Rotary encoder switch pin"
+                default 17
+            config INTERRUPTER_PIN_SDA
+                int "SDA pin"
+                default 18
+            config INTERRUPTER_PIN_SCL
+                int "SCL pin"
+                default 8
+            config INTERRUPTER_PIN_OUTPUT
+                int "Signal output pin"
+                default 4
+        endmenu
+    endmenu
+
+endmenu
