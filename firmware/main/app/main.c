@@ -78,18 +78,18 @@ static void midi_on_receive_cb(midi_message_t msg)
     }
 }
 
-static void knobs_on_change_cb(knobs_mask_t ranges, const int16_t *values[])
+static void knobs_on_change_cb(knobs_mask_t updated, const knob_t *knobs[])
 {
     static float prf = 0;
     static uint16_t pd = 0;
 
-    if (ranges & (1 << KNOB_PRF))
+    if (updated & (1 << KNOB_PRF))
     {
-        prf = *values[KNOB_PRF];
+        prf = knobs[KNOB_PRF]->value;
     }
-    if (ranges & (1 << KNOB_PD))
+    if (updated & (1 << KNOB_PD))
     {
-        pd = *values[KNOB_PD];
+        pd = knobs[KNOB_PD]->value;
     }
 
     ESP_LOGI(TAG, "prf=%d, pd=%d", (int)prf, (int)pd);
@@ -98,16 +98,46 @@ static void knobs_on_change_cb(knobs_mask_t ranges, const int16_t *values[])
 
 static IRAM_ATTR void audio_jack_out_cb(uint16_t value)
 {
-    uint8_t dt = 0;
-    dt = value * PWM_MOD_DUTY_MAX / AUDIO_JACK_OUT_MAX;
-    pwm_modulation_update(dt);
+    // Get knob pointers
+    const knob_t *knobs[KNOB_COUNT];
+    knobs_get_values(knobs);
+
+    // Center input around mid
+    int16_t centered_val = (int16_t)value - AUDIO_JACK_OUT_MID;
+
+    // Apply pseudo-exponential gain for GDB knob
+    int16_t gdb = knobs[KNOB_GDB]->value;  // Gdb range: -50..+50
+    int32_t temp = centered_val;
+    if (gdb > 0) {
+        temp = temp + (temp * gdb * gdb) / 2500; // stronger amplification
+    } else if (gdb < 0) {
+        temp = temp - (temp * gdb * gdb) / 2500; // stronger attenuation
+    }
+    centered_val = (int16_t)temp;
+
+    // Add mid back
+    int16_t val = centered_val + AUDIO_JACK_OUT_MID;
+
+    // Clamp to valid output range
+    if (val < 0) val = 0;
+    if (val > AUDIO_JACK_OUT_MAX) val = AUDIO_JACK_OUT_MAX;
+
+    // Convert to PWM duty (uint8_t) and apply power knob
+    uint32_t dt = (uint32_t)val * PWM_MOD_DUTY_MAX / AUDIO_JACK_OUT_MAX;
+    dt = dt * knobs[KNOB_PWR]->value / knobs[KNOB_PWR]->max_physical;
+
+    // Update PWM
+    pwm_modulation_update((uint8_t)(dt / 2));
 }
 
 static IRAM_ATTR void synth_on_sampling_cb(uint16_t value)
 {
-    uint8_t dt = 0;
-    dt = value * PWM_MOD_DUTY_MAX / SYNTH_OUT_MAX;
-    pwm_modulation_update(dt);
+    const knob_t *knobs[KNOB_COUNT];
+    knobs_get_values(knobs);
+
+    uint32_t dt = (uint32_t)value * PWM_MOD_DUTY_MAX / SYNTH_OUT_MAX;
+    dt = dt * knobs[KNOB_PWR]->value / knobs[KNOB_PWR]->max_physical;
+    pwm_modulation_update((uint8_t)(dt / 2));
 }
 
 // -----------------------------------------------------------------------------

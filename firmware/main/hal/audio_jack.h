@@ -34,6 +34,7 @@ extern "C"
 // -----------------------------------------------------------------------------
 #define AUDIO_JACK_RESOLUTION_BITS 12
 #define AUDIO_JACK_OUT_MAX     ((1U << AUDIO_JACK_RESOLUTION_BITS) - 1)
+#define AUDIO_JACK_OUT_MID     (2110)
 #define AUDIO_JACK_SAMPLING_RATE_HZ (16000)
 
 // -----------------------------------------------------------------------------

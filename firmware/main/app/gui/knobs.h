@@ -43,10 +43,17 @@ typedef enum
     KNOB_PWR,
     KNOB_GDB,
     KNOB_COUNT
-} knobs_t;
+} knob_name_t;
+
+typedef struct
+{
+    volatile int16_t value;
+    int16_t min_physical;
+    int16_t max_physical;
+} knob_t;
 
 typedef uint8_t knobs_mask_t;
-typedef void (* knobs_on_change_cb_t)(knobs_mask_t knobs, const int16_t *values[]);
+typedef void (* knobs_on_change_cb_t)(knobs_mask_t updated, const knob_t *knobs[KNOB_COUNT]);
 
 // -----------------------------------------------------------------------------
 // Inline Function Definitions
@@ -57,7 +64,7 @@ typedef void (* knobs_on_change_cb_t)(knobs_mask_t knobs, const int16_t *values[
 // -----------------------------------------------------------------------------
 esp_err_t knobs_init(void);
 esp_err_t knobs_set_on_change_cb(knobs_on_change_cb_t cb);
-esp_err_t knobs_get_values(knobs_mask_t knobs, const int16_t *values[]);
+esp_err_t knobs_get_values(const knob_t *knobs[KNOB_COUNT]);
 uint16_t knobs_get_current_step(void);
 
 #ifdef __cplusplus

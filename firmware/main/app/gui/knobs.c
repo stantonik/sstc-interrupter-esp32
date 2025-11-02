@@ -19,6 +19,7 @@
 #include "knobs.h"
 #include "app/gui/generated/screens.h"
 #include "app/gui/generated/vars.h"
+#include "esp_attr.h"
 #include "esp_log.h"
 #include "lvgl.h"
 
@@ -70,8 +71,10 @@
     {                                                                                                                  \
         (knob).arc = (arc_obj);                                                                                        \
         (knob).type = (type_val);                                                                                      \
-        (knob).min = (min_val);                                                                                        \
-        (knob).max = (max_val);                                                                                        \
+        (knob).min_physical = (min_val);                                                                               \
+        (knob).max_physical = (max_val);                                                                               \
+        (knob).min_effective = (min_val);                                                                              \
+        (knob).max_effective = (max_val);                                                                              \
         (knob).value = (value_val);                                                                                    \
         (knob).user_value = (value_val);                                                                               \
         (knob).steps[0] = (step0_val);                                                                                 \
@@ -85,17 +88,22 @@
 typedef struct
 {
     lv_obj_t *arc;
-    knobs_t type;
+    knob_name_t type;
     int16_t user_value;
-    volatile int16_t value;
-    int16_t max;
-    int16_t min;
+    struct
+    {
+        volatile int16_t value;
+        int16_t min_physical;
+        int16_t max_physical;
+    };
+    int16_t min_effective;
+    int16_t max_effective;
     uint16_t steps[2];
-} knob_t;
+} knob_data_t;
 
-knob_t prf, pd, pwr, gdb;
-knob_t *all[KNOB_COUNT];
-volatile int16_t *values[KNOB_COUNT] = {NULL};
+knob_data_t prf, pd, pwr, gdb;
+knob_data_t *all[KNOB_COUNT];
+knob_t *knobs_pub[KNOB_COUNT] = {NULL};
 
 // -----------------------------------------------------------------------------
 // Static Variables
@@ -112,10 +120,6 @@ static void arc_change_step_cb(lv_event_t *e);
 static void arc_refresh_visual(lv_event_t *e);
 
 // -----------------------------------------------------------------------------
-// Static Function Definitions
-// -----------------------------------------------------------------------------
-
-// -----------------------------------------------------------------------------
 // Function Definitions
 // -----------------------------------------------------------------------------
 esp_err_t knobs_init(void)
@@ -129,14 +133,14 @@ esp_err_t knobs_init(void)
     /* Gain Range */
     INIT_KNOB(gdb, KNOB_GDB, objects.gdb_arc, GAIN_MIN, GAIN_MAX, GAIN_DEFAULT, 5, 10);
 
-    // Commun assignations
+    // Common assignations
     for (int i = 0; i < KNOB_COUNT; ++i)
     {
-        knob_t *knob = all[i];
+        knob_data_t *knob = all[i];
 
-        values[i] = &knob->value;
+        knobs_pub[i] = (knob_t *)((uint8_t *)knob + offsetof(knob_data_t, value));
 
-        lv_arc_set_range(knob->arc, knob->min, knob->max);
+        lv_arc_set_range(knob->arc, knob->min_physical, knob->max_physical);
         lv_arc_set_value(knob->arc, knob->value);
 
         // Add event callbacks
@@ -167,20 +171,27 @@ esp_err_t knobs_set_on_change_cb(knobs_on_change_cb_t cb)
 
 inline uint16_t knobs_get_current_step(void) { return current_step; }
 
-inline esp_err_t knobs_get_values(knobs_mask_t mask, const int16_t *values[]) { return ESP_OK; }
+inline IRAM_ATTR esp_err_t knobs_get_values(const knob_t *knobs[KNOB_COUNT])
+{
+    memcpy(knobs, knobs_pub, KNOB_COUNT * sizeof(knobs_pub[0]));
+    return ESP_OK;
+}
 
-static inline void sync_changes(knob_t *knob)
+static inline void sync_changes(knob_data_t *knob)
 {
     lv_arc_set_value(knob->arc, knob->value);
     lv_event_send(knob->arc, LV_EVENT_REFRESH, NULL);
 }
 
-static inline void update_value(knob_t *knob, int16_t value, bool user)
+static inline void update_value(knob_data_t *knob, int16_t value, bool user)
 {
-    if (value > knob->max)
-        value = knob->max;
-    else if (value < knob->min)
-        value = knob->min;
+    if (pd.max_effective > pd.max_physical) pd.max_effective = pd.max_physical;
+    if (pd.min_effective < pd.min_physical) pd.min_effective = pd.min_physical;
+
+    if (value > knob->max_effective)
+        value = knob->max_effective;
+    else if (value < knob->min_effective)
+        value = knob->min_effective;
 
     if (user) knob->user_value = value;
     knob->value = value;
@@ -190,14 +201,14 @@ static inline void constrain_pd_to_prf(void)
 {
     float period = 1e6 / prf.value;
     int32_t pd_max_allowed = period - CONFIG_INTERRUPTER_TOFF_MIN;
-    if (pd_max_allowed < pd.min) pd_max_allowed = pd.min;
+    if (pd_max_allowed < pd.min_effective) pd_max_allowed = pd.min_effective;
 
-    pd.max = (pd_max_allowed < PD_MAX) ? pd_max_allowed : PD_MAX;
+    pd.max_effective = (pd_max_allowed < PD_MAX) ? pd_max_allowed : PD_MAX;
 
     // Try to restore user's intended value if possible
     float target = pd.user_value;
-    if (target > pd.max) target = pd.max;
-    if (target < pd.min) target = pd.min;
+    if (target > pd.max_effective) target = pd.max_effective;
+    if (target < pd.min_effective) target = pd.min_effective;
     update_value(&pd, target, false);
 }
 
@@ -206,7 +217,7 @@ static inline void constrain_pd_to_prf(void)
 // -----------------------------------------------------------------------------
 static void arc_value_change_cb(lv_event_t *e)
 {
-    knob_t *knob = lv_event_get_user_data(e);
+    knob_data_t *knob = lv_event_get_user_data(e);
     update_value(knob, lv_arc_get_value(knob->arc), true);
     knobs_mask_t mask = (1 << knob->type);
 
@@ -229,12 +240,12 @@ static void arc_value_change_cb(lv_event_t *e)
 
     sync_changes(knob);
     ESP_LOGI(TAG, "Values updated (knob mask=%d)", (int)mask);
-    if (changed_cb) changed_cb(mask, (const int16_t **)values);
+    if (changed_cb) changed_cb(mask, (const knob_t **)knobs_pub);
 }
 
 static void arc_change_step_cb(lv_event_t *e)
 {
-    knob_t *knob = lv_event_get_user_data(e);
+    knob_data_t *knob = lv_event_get_user_data(e);
     if (!(lv_obj_get_state(knob->arc) & LV_STATE_EDITED)) return;
 
     if (e->code == LV_EVENT_LONG_PRESSED)
