@@ -14,7 +14,5 @@ dependencies:
   #   # `public` flag doesn't have an effect dependencies of the `main` component.
   #   # All dependencies of `main` are public by default.
   #   public: true
-  esp-idf-lib/encoder: ^1.0.7
-  espressif/button: ^4.1.4
-  espressif/esp_lvgl_port: ^2.6.2
-  lvgl/lvgl: ^8
+  espressif/esp_tinyusb: '*'
+  lvgl/lvgl: ^9.5
