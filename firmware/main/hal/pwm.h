@@ -34,7 +34,7 @@ extern "C"
 // -----------------------------------------------------------------------------
 // PWM Modulation Configuration
 #define PWM_MOD_DUTY_RES_BITS   (8)        // 8-bit duty resolution (LEDC_TIMER_8_BIT)
-#define PWM_MOD_CARRIER_FREQ_HZ   (30000)    // 30 kHz PWM carrier frequency
+#define PWM_MOD_CARRIER_FREQ_HZ   (300)    // 30 kHz PWM carrier frequency
 #define PWM_MOD_DUTY_MAX   ((1U << PWM_MOD_DUTY_RES_BITS) - 1)
 
 // -----------------------------------------------------------------------------

@@ -211,9 +211,9 @@ esp_err_t menu_set_mode(menu_mode_t m, bool msg_box)
         lv_obj_clear_flag(objects.aux_type_label, LV_OBJ_FLAG_HIDDEN);
 
         // Display the corresponding knobs
-        lv_obj_add_flag(objects.pd_arc, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(objects.pd_arc, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(objects.prf_arc, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(objects.pwr_arc, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(objects.pwr_arc, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(objects.gdb_arc, LV_OBJ_FLAG_HIDDEN);
 
         lv_group_focus_obj(objects.pwr_arc);

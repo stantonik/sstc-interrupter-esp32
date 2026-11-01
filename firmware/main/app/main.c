@@ -16,6 +16,7 @@
 // -----------------------------------------------------------------------------
 // Includes
 // -----------------------------------------------------------------------------
+#include <math.h>
 #include "app/clients/usb_midi.h"
 #include "app/gui/knobs.h"
 #include "clients/usb_midi.h"
@@ -36,10 +37,11 @@
 // -----------------------------------------------------------------------------
 #define TAG "main"
 
-#define RETURN_ON_ERROR(x)                                                                                             \
-    {                                                                                                                  \
-        esp_err_t ret = (x);                                                                                           \
-        if (ret != ESP_OK) return;                                                                                     \
+#define RETURN_ON_ERROR(x)                                                                         \
+    {                                                                                              \
+        esp_err_t ret = (x);                                                                       \
+        if (ret != ESP_OK)                                                                         \
+            return;                                                                                \
     }
 
 // -----------------------------------------------------------------------------
@@ -53,9 +55,13 @@
 // -----------------------------------------------------------------------------
 // Static Function Definitions
 // -----------------------------------------------------------------------------
-static void midi_on_receive_cb(midi_message_t msg)
+static void
+midi_on_receive_cb(midi_message_t msg)
 {
-    if (menu_get_mode() != MENU_MODE_MIDI) return;
+    if (menu_get_mode() != MENU_MODE_MIDI)
+    {
+        return;
+    }
 
     static synth_note_t synth_note = {0};
     synth_note.note = msg.note % 12;
@@ -63,9 +69,13 @@ static void midi_on_receive_cb(midi_message_t msg)
 
     if (msg.state == 1)
     {
-        synth_play_note(synth_note);
+        // synth_play_note(synth_note);
 
         midi_msg_parsed_t parsed_msg = usb_midi_parse_msg(&msg);
+
+        const knob_t *knobs[KNOB_COUNT];
+        knobs_get_values(knobs);
+        pwm_manual_update(parsed_msg.freq_hz, knobs[KNOB_PD]->value);
 
         char header[16];
         snprintf(header, 16, "%s%d", parsed_msg.note, parsed_msg.octave);
@@ -73,12 +83,14 @@ static void midi_on_receive_cb(midi_message_t msg)
     }
     else
     {
-        synth_stop_note(synth_note);
+        // synth_stop_note(synth_note);
+        pwm_manual_update(0, 0);
         menu_set_header_text("");
     }
 }
 
-static void knobs_on_change_cb(knobs_mask_t updated, const knob_t *knobs[])
+static void
+knobs_on_change_cb(knobs_mask_t updated, const knob_t *knobs[])
 {
     static float prf = 0;
     static uint16_t pd = 0;
@@ -92,58 +104,73 @@ static void knobs_on_change_cb(knobs_mask_t updated, const knob_t *knobs[])
         pd = knobs[KNOB_PD]->value;
     }
 
-    ESP_LOGI(TAG, "prf=%d, pd=%d", (int)prf, (int)pd);
-    pwm_manual_update(prf, pd);
-}
-
-static IRAM_ATTR void audio_jack_out_cb(uint16_t value)
-{
-    // Get knob pointers
-    const knob_t *knobs[KNOB_COUNT];
-    knobs_get_values(knobs);
-
-    // Center input around mid
-    int16_t centered_val = (int16_t)value - AUDIO_JACK_OUT_MID;
-
-    // Apply pseudo-exponential gain for GDB knob
-    int16_t gdb = knobs[KNOB_GDB]->value;  // Gdb range: -50..+50
-    int32_t temp = centered_val;
-    if (gdb > 0) {
-        temp = temp + (temp * gdb * gdb) / 2500; // stronger amplification
-    } else if (gdb < 0) {
-        temp = temp - (temp * gdb * gdb) / 2500; // stronger attenuation
+    if (menu_get_mode() == MENU_MODE_MANUAL)
+    {
+        ESP_LOGI(TAG, "prf=%d, pd=%d", (int)prf, (int)pd);
+        pwm_manual_update(prf, pd);
     }
-    centered_val = (int16_t)temp;
-
-    // Add mid back
-    int16_t val = centered_val + AUDIO_JACK_OUT_MID;
-
-    // Clamp to valid output range
-    if (val < 0) val = 0;
-    if (val > AUDIO_JACK_OUT_MAX) val = AUDIO_JACK_OUT_MAX;
-
-    // Convert to PWM duty (uint8_t) and apply power knob
-    uint32_t dt = (uint32_t)val * PWM_MOD_DUTY_MAX / AUDIO_JACK_OUT_MAX;
-    dt = dt * knobs[KNOB_PWR]->value / knobs[KNOB_PWR]->max_physical;
-
-    // Update PWM
-    pwm_modulation_update((uint8_t)(dt / 2));
 }
 
-static IRAM_ATTR void synth_on_sampling_cb(uint16_t value)
+static IRAM_ATTR void
+audio_jack_out_cb(uint16_t value)
 {
-    const knob_t *knobs[KNOB_COUNT];
-    knobs_get_values(knobs);
+    // // Get knob pointers
+    // const knob_t *knobs[KNOB_COUNT];
+    // knobs_get_values(knobs);
 
-    uint32_t dt = (uint32_t)value * PWM_MOD_DUTY_MAX / SYNTH_OUT_MAX;
-    dt = dt * knobs[KNOB_PWR]->value / knobs[KNOB_PWR]->max_physical;
-    pwm_modulation_update((uint8_t)(dt / 2));
+    // // Center input around mid
+    // int16_t centered_val = (int16_t)value - AUDIO_JACK_OUT_MID;
+
+    // // Apply pseudo-exponential gain for GDB knob
+    // int16_t gdb = knobs[KNOB_GDB]->value; // Gdb range: -50..+50
+    // int32_t temp = centered_val;
+    // if (gdb > 0)
+    // {
+    //     temp = temp + (temp * gdb * gdb) / 2500; // stronger amplification
+    // }
+    // else if (gdb < 0)
+    // {
+    //     temp = temp - (temp * gdb * gdb) / 2500; // stronger attenuation
+    // }
+    // centered_val = (int16_t)temp;
+
+    // // Add mid back
+    // int16_t val = centered_val + AUDIO_JACK_OUT_MID;
+
+    // // Clamp to valid output range
+    // if (val < 0)
+    // {
+    //     val = 0;
+    // }
+    // if (val > AUDIO_JACK_OUT_MAX)
+    // {
+    //     val = AUDIO_JACK_OUT_MAX;
+    // }
+
+    // // Convert to PWM duty (uint8_t) and apply power knob
+    // uint32_t dt = (uint32_t)val * PWM_MOD_DUTY_MAX / AUDIO_JACK_OUT_MAX;
+    // dt = dt * knobs[KNOB_PWR]->value / knobs[KNOB_PWR]->max_physical;
+
+    // // Update PWM
+    // pwm_modulation_update((uint8_t)(dt / 2));
+}
+
+static IRAM_ATTR void
+synth_on_sampling_cb(uint16_t value)
+{
+    // const knob_t *knobs[KNOB_COUNT];
+    // knobs_get_values(knobs);
+
+    // uint32_t dt = (uint32_t)value * PWM_MOD_DUTY_MAX / SYNTH_OUT_MAX;
+    // dt = dt * knobs[KNOB_PWR]->value / knobs[KNOB_PWR]->max_physical;
+    // pwm_modulation_update((uint8_t)(dt / 2));
 }
 
 // -----------------------------------------------------------------------------
 // Function Definitions
 // -----------------------------------------------------------------------------
-void app_main(void)
+void
+app_main(void)
 {
     ESP_LOGI(TAG, "Firmware starting...");
 
@@ -212,62 +239,73 @@ void app_main(void)
         {
             switch (e.type)
             {
-            case CONTROLS_EVENT_TRIGGER_PRESSED:
-                ESP_LOGI(TAG, "Armed");
-                menu_set_state(MENU_STATE_ARMED);
-                pwm_enable();
-                break;
-            case CONTROLS_EVENT_TRIGGER_RELEASED:
-                ESP_LOGI(TAG, "Disarmed");
-                menu_set_state(MENU_STATE_IDLE);
-                pwm_disable();
-                break;
-            default:
-                break;
+                case CONTROLS_EVENT_TRIGGER_PRESSED:
+                    ESP_LOGI(TAG, "Armed");
+                    menu_set_state(MENU_STATE_ARMED);
+                    pwm_enable();
+                    break;
+                case CONTROLS_EVENT_TRIGGER_RELEASED:
+                    ESP_LOGI(TAG, "Disarmed");
+                    menu_set_state(MENU_STATE_IDLE);
+                    pwm_disable();
+                    break;
+                default: break;
             }
         }
         else if (e.source == EVENT_SRC_AUDIO_JACK)
         {
             switch (e.type)
             {
-            case AUDIO_JACK_EVENT_PLUGGED:
-                if (menu_get_mode() != MENU_MODE_MANUAL) break;
-                ESP_LOGI(TAG, "Line-IN mode");
-                menu_set_mode(MENU_MODE_AUDIO_JACK, true);
-                audio_jack_start_listen();
-                pwm_set_mode(PWM_MODE_MODULATION);
-                break;
-            case AUDIO_JACK_EVENT_UNPLUGGED:
-                if (menu_get_mode() != MENU_MODE_AUDIO_JACK) break;
-                ESP_LOGI(TAG, "Manual mode");
-                menu_set_mode(MENU_MODE_MANUAL, true);
-                audio_jack_stop_listen();
-                pwm_set_mode(PWM_MODE_MANUAL);
-                break;
-            default:
-                break;
+                case AUDIO_JACK_EVENT_PLUGGED:
+                    if (menu_get_mode() != MENU_MODE_MANUAL)
+                    {
+                        break;
+                    }
+                    ESP_LOGI(TAG, "Line-IN mode");
+                    menu_set_mode(MENU_MODE_AUDIO_JACK, true);
+                    audio_jack_start_listen();
+                    pwm_set_mode(PWM_MODE_MODULATION);
+                    break;
+                case AUDIO_JACK_EVENT_UNPLUGGED:
+                    if (menu_get_mode() != MENU_MODE_AUDIO_JACK)
+                    {
+                        break;
+                    }
+                    ESP_LOGI(TAG, "Manual mode");
+                    menu_set_mode(MENU_MODE_MANUAL, true);
+                    audio_jack_stop_listen();
+                    pwm_set_mode(PWM_MODE_MANUAL);
+                    break;
+                default: break;
             }
         }
         else if (e.source == EVENT_SRC_USB_MIDI)
         {
             switch (e.type)
             {
-            case USB_MIDI_EVENT_CONNECTED:
-                if (menu_get_mode() != MENU_MODE_MANUAL) break;
-                ESP_LOGI(TAG, "MIDI mode");
-                menu_set_mode(MENU_MODE_MIDI, true);
-                pwm_set_mode(PWM_MODE_MODULATION);
-                synth_enable();
-                break;
-            case USB_MIDI_EVENT_DISCONNECTED:
-                if (menu_get_mode() != MENU_MODE_MIDI) break;
-                ESP_LOGI(TAG, "Manual mode");
-                menu_set_mode(MENU_MODE_MANUAL, true);
-                synth_disable();
-                pwm_set_mode(PWM_MODE_MANUAL);
-                break;
-            default:
-                break;
+                case USB_MIDI_EVENT_CONNECTED:
+                    if (menu_get_mode() != MENU_MODE_MANUAL)
+                    {
+                        break;
+                    }
+                    ESP_LOGI(TAG, "MIDI mode");
+                    menu_set_mode(MENU_MODE_MIDI, true);
+                    pwm_set_mode(
+                        PWM_MODE_MANUAL
+                    ); /* TODO: Make a menu to swich between monotonic and polyphonic */
+                    // synth_enable();
+                    break;
+                case USB_MIDI_EVENT_DISCONNECTED:
+                    if (menu_get_mode() != MENU_MODE_MIDI)
+                    {
+                        break;
+                    }
+                    ESP_LOGI(TAG, "Manual mode");
+                    menu_set_mode(MENU_MODE_MANUAL, true);
+                    // synth_disable();
+                    pwm_set_mode(PWM_MODE_MANUAL);
+                    break;
+                default: break;
             }
         }
     }
