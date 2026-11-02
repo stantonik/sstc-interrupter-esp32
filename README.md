@@ -19,7 +19,6 @@
     - Nice and simple graphical interface
 
 - **Connectivity**
-    - USB-C for power input only
     - USB-C OTG/Serial for MIDI/Programming
     - Toslink SPDIF output
 
